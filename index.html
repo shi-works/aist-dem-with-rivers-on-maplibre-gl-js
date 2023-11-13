@@ -1,0 +1,280 @@
+<html>
+
+<head>
+    <title>産総研 シームレス標高タイル（統合DEM）+NOAA GEBCO_2023</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src='https://unpkg.com/maplibre-gl@3.4.1/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.4.1/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@2.10.0/dist/index.js"></script>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .map-overlay {
+            font: bold 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 200px;
+            bottom: 20px;
+            left: 0;
+            padding: 10px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .map-overlay label {
+            display: block;
+            margin: 0 0 0px;
+            font-size: 12px;
+            top: 100px;
+            left: 10px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .map-overlay input {
+            background-color: transparent;
+            display: inline-block;
+            width: 100%;
+            position: relative;
+            margin: 0;
+            cursor: ew-resize;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div class="map-overlay top">
+        <div class="map-overlay-inner">
+            <label>地形の高さを強調する倍率: <span id="exaggeration-slider-opacity-value">10倍</span></label>
+            <input id="exaggeration-slider-opacity" type="range" min="0" max="20" step="1" value="10">
+            <label>海底地形図 不透明度: <span id="bathymetry-slider-opacity-value">100%</span></label>
+            <input id="bathymetry-slider-opacity" type="range" min="0" max="100" step="1" value="100">
+        </div>
+    </div>
+    <script type="module">
+        // protocolの設定
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        // Terrain-RGB形式への変換モジュール
+        import { makeNumPngProtocol } from './numPngProtocol.js'
+
+        // マップの初期化
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://tile2.openstreetmap.jp/styles/osm-bright/style.json',
+            zoom: 2.07,
+            minZoom: 1,
+            maxZoom: 23,
+            pitch: 0,
+            bearing: 0,
+            maxPitch: 85,
+            center: [9.67, 7.97],
+            hash: true,
+            attributionControl: false
+        });
+
+        // ズーム・回転
+        map.addControl(new maplibregl.NavigationControl());
+
+        // フルスクリーンモードのオンオフ
+        map.addControl(new maplibregl.FullscreenControl());
+
+        // 現在位置表示
+        map.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }));
+
+        // スケール表示
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 200,
+            unit: 'metric'
+        }));
+
+        // Attributionを折りたたみ表示
+        map.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '（<a href="https://twitter.com/shi__works" target="_blank">Twitter</a> | <a href="https://github.com/shi-works/aist-dem-with-gebco-bathymetry-chart-wms-on-maplibre-gl-js" target="_blank">Github</a>） '
+        }));
+
+        /*
+        // 3D地形コントロール
+        map.addControl(
+            new maplibregl.TerrainControl({
+                source: 'aist-dem',
+                exaggeration: 7 // 標高を強調する倍率
+            })
+        );
+        */
+
+        map.on('load', () => {
+            // 産総研 シームレス標高タイルソース
+            map.addSource("aist-dem", {
+                type: 'raster-dem',
+                tiles: [
+                    'numpng://tiles.gsj.jp/tiles/elev/mixed/{z}/{y}/{x}.png',
+                ],
+                attribution: '<a href="https://tiles.gsj.jp/tiles/elev/tiles.html" target="_blank">産業技術総合研究所 シームレス標高タイル(統合DEM)</a>',
+                tileSize: 256
+            });
+
+            // 産総研 シームレス標高タイルセット
+            map.setTerrain({ 'source': 'aist-dem', 'exaggeration': 10 });
+
+            // スライダーでシームレス標高タイルの高さの倍率を制御
+            const exaggeration_sliderOpacity = document.getElementById('exaggeration-slider-opacity');
+            const exaggeration_sliderOpacityValue = document.getElementById('exaggeration-slider-opacity-value');
+
+            exaggeration_sliderOpacity.addEventListener('input', (e) => {
+                const exaggerationValue = parseFloat(e.target.value);
+                map.setTerrain({ 'source': 'aist-dem', 'exaggeration': exaggerationValue });
+                exaggeration_sliderOpacityValue.textContent = e.target.value + '倍';
+            });
+
+            // GEBCO WMS 海底地形図ソース
+            map.addSource("gebco-wms", {
+                'type': 'raster',
+                'tiles': [
+                    'https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=gebco_latest&STYLES=&FORMAT=image/png&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'
+                ],
+                attribution: '<a href="https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/" target="_blank">GEBCO(WMS)</a>',
+                'tileSize': 256
+            });
+
+            // GEBCO WMS 海底地形図レイヤ
+            map.addLayer({
+                'id': 'gebco-wms-layer',
+                'type': 'raster',
+                'source': 'gebco-wms',
+                'paint': {
+                    'raster-opacity': 1
+                }
+            });
+
+            // スライダーでWMSの不透明度を制御
+            const bathymetry_sliderOpactiy = document.getElementById('bathymetry-slider-opacity');
+            const bathymetry_sliderOpactiyValue = document.getElementById('bathymetry-slider-opacity-value');
+
+            bathymetry_sliderOpactiy.addEventListener('input', (e) => {
+                map.setPaintProperty(
+                    'gebco-wms-layer',
+                    'raster-opacity',
+                    parseInt(e.target.value, 10) / 100
+                );
+                bathymetry_sliderOpactiyValue.textContent = e.target.value + '%';
+            });
+
+            // 河川ベクトルタイルソース
+            map.addSource('fao-aquamaps-river', {
+                'type': 'vector',
+                url: "pmtiles://" + "https://xs489works.xsrv.jp/pmtiles-data/fao/fao_aquamaps_rivers_add_color.pmtiles",
+                attribution: '<a href="https://www.fao.org/land-water/databases-and-software/aquamaps/en/">Food and Agriculture Organization</a>'
+            });
+
+            // 河川ベクトルタイルレイヤ
+            map.addLayer({
+                'id': 'river-line',
+                'type': 'line',
+                'source': 'fao-aquamaps-river',
+                'source-layer': "fao_aquamaps_rivers_add_colorfgb",
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                'paint': {
+                    'line-color': ['get', 'color'],
+                    'line-width': 0.5
+                }
+            });
+
+            // GEBCO featuresソース
+            map.addSource("undersea-features-linestring", {
+                type: "geojson",
+                data: "features-multilinestring.geojson",
+                attribution: '<a href="https://www.gebco.net/data_and_products/undersea_feature_names/">GEBCO(Undersea Feature Names)</a>'
+            });
+
+            // GEBCO featuresラベルレイヤ
+            map.addLayer({
+                id: 'undersea-features-linestring-label',
+                type: 'symbol',
+                source: 'undersea-features-linestring',
+                minzoom: 5,
+                maxzoom: 23,
+                layout: {
+                    'symbol-placement': 'line-center', // ラベルを線に沿って配置
+                    'text-rotation-alignment': 'map', // ラベルの回転を線に沿って調整
+                    'text-field': ['get', 'name'],
+                    'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+                    'text-size': 14,
+                    'text-offset': [0, 0]
+                },
+                paint: {
+                    'text-color': 'rgba(255, 255, 255, 1)',
+                    'text-halo-blur': 0.8,
+                    'text-halo-color': 'rgba(0, 0, 0, 1)',
+                    'text-halo-width': 1
+                },
+            });
+
+            // OSM regions elevation pointsソース
+            map.addSource("regions-elevation-points", {
+                type: "geojson",
+                data: "ne_10m_geography_regions_elevation_points.geojson",
+                attribution: '<a href="https://www.naturalearthdata.com/">Natural Earth(Elevation Points)</a>'
+            });
+
+            // OSM regions elevation pointsレイヤ
+            map.addLayer({
+                id: 'regions-elevation-points-label',
+                type: 'symbol',
+                source: 'regions-elevation-points',
+                minzoom: 5,
+                maxzoom: 23,
+                layout: {
+                    'text-field': ['get', 'name'],
+                    'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+                    'text-size': 12,
+                    'text-offset': [0, 0],
+                    'text-allow-overlap': false,
+                    'text-ignore-placement': false,
+                    'text-max-width': 20  // テキストが折り返される前の最大幅を設定
+                },
+                paint: {
+                    'text-color': 'rgba(255, 255, 255, 1)',
+                    'text-halo-blur': 0.8,
+                    'text-halo-color': 'rgba(0, 0, 0, 1)',
+                    'text-halo-width': 1
+                }
+            });
+
+            map.showTileBoundaries = false;
+
+        })
+
+        // addProtocolを設定
+        maplibregl.addProtocol('numpng', makeNumPngProtocol());
+
+    </script>
+</body>
+
+</html>
