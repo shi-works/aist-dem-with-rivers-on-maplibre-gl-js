@@ -77,13 +77,13 @@
         const map = new maplibregl.Map({
             container: 'map',
             style: 'https://tile2.openstreetmap.jp/styles/osm-bright/style.json',
-            zoom: 2.07,
+            zoom: 4.06,
             minZoom: 1,
             maxZoom: 23,
             pitch: 0,
             bearing: 0,
             maxPitch: 85,
-            center: [9.67, 7.97],
+            center: [9.57, 47.34],
             hash: true,
             attributionControl: false
         });
@@ -184,25 +184,36 @@
             });
 
             // 河川ベクトルタイルソース
-            map.addSource('fao-aquamaps-river', {
+            map.addSource('river', {
                 'type': 'vector',
-                url: "pmtiles://" + "https://xs489works.xsrv.jp/pmtiles-data/fao/fao_aquamaps_rivers_add_color.pmtiles",
-                attribution: '<a href="https://www.fao.org/land-water/databases-and-software/aquamaps/en/">Food and Agriculture Organization</a>'
+                // url: "pmtiles://" + "https://xs489works.xsrv.jp/pmtiles-data/fao/fao_aquamaps_rivers_add_color.pmtiles",
+                url: "pmtiles://" + "https://xs489works.xsrv.jp/pmtiles-data/HydroRIVERS/HydroRIVERS_v10_add_color.pmtiles",
+                // attribution: '<a href="https://www.fao.org/land-water/databases-and-software/aquamaps/en/">Food and Agriculture Organization</a>'
+                attribution: '<a href="https://www.hydrosheds.org/products/hydrorivers">HydroSHEDS(HydroRIVERS)</a>'
             });
 
             // 河川ベクトルタイルレイヤ
             map.addLayer({
                 'id': 'river-line',
                 'type': 'line',
-                'source': 'fao-aquamaps-river',
-                'source-layer': "fao_aquamaps_rivers_add_colorfgb",
+                'source': 'river',
+                // 'source-layer': "fao_aquamaps_rivers_add_colorfgb",
+                'source-layer': "HydroRIVERS_v10_add_colorfgb",
                 'layout': {
                     'line-join': 'round',
                     'line-cap': 'round'
                 },
                 'paint': {
                     'line-color': ['get', 'color'],
-                    'line-width': 0.5
+                    // 'line-width': 0.5
+                    'line-width': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        5, 0.5,
+                        8, 2,
+                        12, 4
+                    ]
                 }
             });
 
